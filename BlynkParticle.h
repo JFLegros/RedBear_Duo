@@ -12,7 +12,7 @@
 #define BlynkParticle_h
 
 #include "BlynkApiParticle.h"
-#include "BlynkProtocol.h"
+#include "Blynk/BlynkProtocol.h"
 
 class BlynkTransportParticle
 {

@@ -11,12 +11,19 @@
 #ifndef BlynkApiParticle_h
 #define BlynkApiParticle_h
 
-#include "BlynkApi.h"
+#include "Blynk/BlynkApi.h"
 #include "application.h"
 
 template<class Proto>
 void BlynkApi<Proto>::Init()
 {
+}
+
+template<class Proto>
+BLYNK_FORCE_INLINE
+millis_time_t BlynkApi<Proto>::getMillis()
+{
+    return millis();
 }
 
 #ifdef BLYNK_NO_INFO
