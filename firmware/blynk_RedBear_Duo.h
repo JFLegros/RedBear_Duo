@@ -1,1 +1,1 @@
-#include "BlynkSimpleParticle.h"
+#include "BlynkSimpleRedBear_Duo.h"
