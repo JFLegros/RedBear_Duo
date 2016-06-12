@@ -14,7 +14,7 @@
     #define BLYNK_USE_PRINT_CLASS
 #endif
 
-#include "BlynkApi.h"
+#include <Blynk/BlynkApi.h>
 
 #ifdef BLYNK_USE_PRINT_CLASS
     #if !(defined(SPARK) || defined(PARTICLE) || (PLATFORM_ID==88) || defined(ARDUINO_RedBear_Duo)) // 88 -> RBL Duo

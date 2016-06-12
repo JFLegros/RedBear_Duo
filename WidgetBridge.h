@@ -11,7 +11,7 @@
 #ifndef WidgetBridge_h
 #define WidgetBridge_h
 
-#include "BlynkApi.h"
+#include <Blynk/BlynkApi.h>
 
 class WidgetBridge
 {
