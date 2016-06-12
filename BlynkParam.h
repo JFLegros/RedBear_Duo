@@ -13,8 +13,8 @@
 
 #include <string.h>
 #include <stdlib.h>
-#include "BlynkConfig.h"
-#include "BlynkDebug.h"
+#include <Blynk/BlynkConfig.h>
+#include <Blynk/BlynkDebug.h>
 
 #define BLYNK_PARAM_KV(k, v) k "\0" v "\0"
 
@@ -152,7 +152,11 @@ void BlynkParam::add(const String& str)
 {
     size_t len = str.length()+1;
     char buff[len];
+#if defined(ARDUINO_AVR_DIGISPARK)
+    const_cast<String&>(str).toCharArray(buff, len);
+#else
     str.toCharArray(buff, len);
+#endif
     BlynkParam::add(buff, len);
 }
 

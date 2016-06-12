@@ -1,191 +1,286 @@
 /**
- * @file       BlynkApiParticle.h
+ * @file       BlynkApi.h
  * @author     Volodymyr Shymanskyy
  * @license    This project is released under the MIT License (MIT)
  * @copyright  Copyright (c) 2015 Volodymyr Shymanskyy
- * @date       Mar 2015
- * @brief
+ * @date       Jan 2015
+ * @brief      High-level functions
  *
  */
 
-#ifndef BlynkApiParticle_h
-#define BlynkApiParticle_h
+#ifndef BlynkApi_h
+#define BlynkApi_h
 
-#include "Blynk/BlynkApi.h"
-#include "application.h"
+#include <Blynk/BlynkConfig.h>
+#include <Blynk/BlynkDebug.h>
+#include <Blynk/BlynkParam.h>
+#include <Blynk/BlynkHandlers.h>
+#include <Blynk/BlynkProtocolDefs.h>
 
-template<class Proto>
-void BlynkApi<Proto>::Init()
+/**
+ * Represents high-level functions of Blynk
+ */
+template <class Proto>
+class BlynkApi
 {
-}
-
-template<class Proto>
-BLYNK_FORCE_INLINE
-millis_time_t BlynkApi<Proto>::getMillis()
-{
-    return millis();
-}
-
-#ifdef BLYNK_NO_INFO
-
-template<class Proto>
-BLYNK_FORCE_INLINE
-void BlynkApi<Proto>::sendInfo() {}
-
-#else
-
-template<class Proto>
-BLYNK_FORCE_INLINE
-void BlynkApi<Proto>::sendInfo()
-{
-    static const char profile[] BLYNK_PROGMEM =
-        BLYNK_PARAM_KV("ver"    , BLYNK_VERSION)
-        BLYNK_PARAM_KV("h-beat" , TOSTRING(BLYNK_HEARTBEAT))
-        BLYNK_PARAM_KV("buff-in", TOSTRING(BLYNK_MAX_READBYTES))
-#ifdef BLYNK_INFO_DEVICE
-        BLYNK_PARAM_KV("dev"    , BLYNK_INFO_DEVICE)
-#endif
-#ifdef BLYNK_INFO_CPU
-        BLYNK_PARAM_KV("cpu"    , BLYNK_INFO_CPU)
-#endif
-#ifdef BLYNK_INFO_CONNECTION
-        BLYNK_PARAM_KV("con"    , BLYNK_INFO_CONNECTION)
-#endif
-        BLYNK_PARAM_KV("build"  , __DATE__ " " __TIME__)
-    ;
-    const size_t profile_len = sizeof(profile)-1;
-
-#ifdef BLYNK_HAS_PROGMEM
-    char mem[profile_len];
-    memcpy_P(mem, profile, profile_len);
-    static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE_INFO, 0, mem, profile_len);
-#else
-    static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE_INFO, 0, profile, profile_len);
-#endif
-    return;
-}
-
-#endif
-
-template<class Proto>
-BLYNK_FORCE_INLINE
-void BlynkApi<Proto>::processCmd(const void* buff, size_t len)
-{
-    BlynkParam param((void*)buff, len);
-    BlynkParam::iterator it = param.begin();
-    if (it >= param.end())
-        return;
-    const char* cmd = it.asStr();
-    const uint16_t cmd16 = *(uint16_t*)cmd;
-
-    if (++it >= param.end())
-        return;
-
-#if defined(analogInputToDigitalPin)
-    // Good! Analog pins can be referenced on this device by name.
-    const uint8_t pin = (it.asStr()[0] == 'A') ?
-                         analogInputToDigitalPin(atoi(it.asStr()+1)) :
-                         it.asInt();
-#else
-    #warning "analogInputToDigitalPin not defined => Named analog pins will not work"
-    const uint8_t pin = it.asInt();
-#endif
-
-    switch(cmd16) {
-
-#ifndef BLYNK_NO_BUILTIN
-
-    case BLYNK_HW_PM: {
-        while (it < param.end()) {
-            ++it;
-            if (!strcmp(it.asStr(), "in")) {
-                pinMode(pin, INPUT);
-            } else if (!strcmp(it.asStr(), "out") || !strcmp(it.asStr(), "pwm")) {
-                pinMode(pin, OUTPUT);
-#ifdef INPUT_PULLUP
-            } else if (!strcmp(it.asStr(), "pu")) {
-                pinMode(pin, INPUT_PULLUP);
-#endif
-#ifdef INPUT_PULLDOWN
-            } else if (!strcmp(it.asStr(), "pd")) {
-                pinMode(pin, INPUT_PULLDOWN);
-#endif
-            } else {
-#ifdef BLYNK_DEBUG
-                BLYNK_LOG4(BLYNK_F("Invalid pin "), pin, BLYNK_F(" mode "), it.asStr());
-#endif
-            }
-            ++it;
-        }
-    } break;
-    case BLYNK_HW_DR: {
-        char mem[16];
-        BlynkParam rsp(mem, 0, sizeof(mem));
-        rsp.add("dw");
-        rsp.add(pin);
-        rsp.add(digitalRead(pin));
-        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, rsp.getBuffer(), rsp.getLength()-1);
-    } break;
-    case BLYNK_HW_DW: {
-        // Should be 1 parameter (value)
-        if (++it >= param.end())
-            return;
-
-#ifdef ESP8266
-        // Disable PWM...
-        analogWrite(pin, 0);
-#endif
-#ifndef BLYNK_MINIMIZE_PINMODE_USAGE
-        pinMode(pin, OUTPUT);
-#endif
-        digitalWrite(pin, it.asInt() ? HIGH : LOW);
-    } break;
-    case BLYNK_HW_AR: {
-        char mem[16];
-        BlynkParam rsp(mem, 0, sizeof(mem));
-        rsp.add("aw");
-        rsp.add(pin);
-        rsp.add(analogRead(pin));
-        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, rsp.getBuffer(), rsp.getLength()-1);
-    } break;
-    case BLYNK_HW_AW: {
-        // Should be 1 parameter (value)
-        if (++it >= param.end())
-            return;
-
-#ifndef BLYNK_MINIMIZE_PINMODE_USAGE
-        pinMode(pin, OUTPUT);
-#endif
-        analogWrite(pin, it.asInt());
-    } break;
-
-#endif
-
-    case BLYNK_HW_VR: {
-        BlynkReq req = { pin };
-        WidgetReadHandler handler = GetReadHandler(pin);
-        if (handler && (handler != BlynkWidgetRead)) {
-            handler(req);
-        } else {
-            BlynkWidgetReadDefault(req);
-        }
-    } break;
-    case BLYNK_HW_VW: {
-        ++it;
-        char* start = (char*)it.asStr();
-        BlynkParam param2(start, len - (start - (char*)buff));
-        BlynkReq req = { pin };
-        WidgetWriteHandler handler = GetWriteHandler(pin);
-        if (handler && (handler != BlynkWidgetWrite)) {
-            handler(req, param2);
-        } else {
-            BlynkWidgetWriteDefault(req, param2);
-        }
-    } break;
-    default:
-        BLYNK_LOG2(BLYNK_F("Invalid HW cmd: "), cmd);
-        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_RESPONSE, static_cast<Proto*>(this)->currentMsgId, NULL, BLYNK_ILLEGAL_COMMAND);
+public:
+    BlynkApi() {
+        Init();
     }
-}
+
+#ifdef DOXYGEN // These API here are only for the documentation
+
+    /**
+     * Connects to the server.
+     * Blocks until connected or timeout happens.
+     * May take less or more then timeout value.
+     *
+     * @param timeout    Connection timeout
+     * @returns          True if connected to the server
+     */
+    bool connect(unsigned long timeout = BLYNK_TIMEOUT_MS*3);
+
+    /**
+     * Disconnects from the server.
+     * It will not try to reconnect, until connect() is called
+     */
+    void disconnect();
+
+    /**
+     * @returns          True if connected to the server
+     */
+    bool connected();
+
+    /**
+     * Performs Blynk-related housekeeping
+     * and processes incoming commands
+     *
+     * @param available  True if there is incoming data to process
+     *                   Only used when user manages connection manually.
+     */
+    bool run(bool available = false);
+
+#endif // DOXYGEN
+
+    /**
+     * Sends value to a Virtual Pin
+     *
+     * @param pin  Virtual Pin number
+     * @param data Value to be sent
+     */
+    template <typename T>
+    void virtualWrite(int pin, const T& data) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vw");
+        cmd.add(pin);
+        cmd.add(data);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    template <typename T1, typename T2>
+    void virtualWrite(int pin, const T1& data1, const T2& data2) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vw");
+        cmd.add(pin);
+        cmd.add(data1);
+        cmd.add(data2);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    template <typename T1, typename T2, typename T3>
+    void virtualWrite(int pin, const T1& data1, const T2& data2, const T3& data3) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vw");
+        cmd.add(pin);
+        cmd.add(data1);
+        cmd.add(data2);
+        cmd.add(data3);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    template <typename T1, typename T2, typename T3, typename T4>
+    void virtualWrite(int pin, const T1& data1, const T2& data2, const T3& data3, const T4& data4) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vw");
+        cmd.add(pin);
+        cmd.add(data1);
+        cmd.add(data2);
+        cmd.add(data3);
+        cmd.add(data4);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Sends buffer to a Virtual Pin
+     *
+     * @param pin  Virtual Pin number
+     * @param buff Data buffer
+     * @param len  Length of data
+     */
+    void virtualWriteBinary(int pin, const void* buff, size_t len) {
+        char mem[8];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vw");
+        cmd.add(pin);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE, 0, cmd.getBuffer(), cmd.getLength(), buff, len);
+    }
+
+    /**
+     * Sends BlynkParam to a Virtual Pin
+     *
+     * @param pin  Virtual Pin number
+     * @param param
+     */
+    void virtualWrite(int pin, const BlynkParam& param) {
+        virtualWriteBinary(pin, param.getBuffer(), param.getLength());
+    }
+
+    /**
+     * Requests Server to re-send current values for all widgets.
+     */
+    void syncAll() {
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE_SYNC);
+    }
+
+    /**
+     * Requests App or Server to re-send current value of a Virtual Pin.
+     * This will probably cause user-defined BLYNK_WRITE handler to be called.
+     *
+     * @param pin Virtual Pin number
+     */
+    void syncVirtual(int pin) {
+        char mem[8];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add("vr");
+        cmd.add(pin);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_HARDWARE_SYNC, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Tweets a message
+     *
+     * @param msg Text of the message
+     */
+    template<typename T>
+    void tweet(const T& msg) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add(msg);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_TWEET, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Sends a push notification to the App
+     *
+     * @param msg Text of the message
+     */
+    template<typename T>
+    void notify(const T& msg) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add(msg);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_NOTIFY, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Sends an SMS
+     *
+     * @param msg Text of the message
+     */
+    template<typename T>
+    void sms(const T& msg) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add(msg);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_SMS, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Sends an email message
+     *
+     * @param email   Email to send to
+     * @param subject Subject of message
+     * @param msg     Text of the message
+     */
+    template <typename T1, typename T2>
+    void email(const char* email, const T1& subject, const T2& msg) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add(email);
+        cmd.add(subject);
+        cmd.add(msg);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_EMAIL, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+    /**
+     * Sends an email message
+     *
+     * @param subject Subject of message
+     * @param msg     Text of the message
+     */
+    template <typename T1, typename T2>
+    void email(const T1& subject, const T2& msg) {
+        char mem[BLYNK_MAX_SENDBYTES];
+        BlynkParam cmd(mem, 0, sizeof(mem));
+        cmd.add(subject);
+        cmd.add(msg);
+        static_cast<Proto*>(this)->sendCmd(BLYNK_CMD_EMAIL, 0, cmd.getBuffer(), cmd.getLength()-1);
+    }
+
+#if defined(BLYNK_EXPERIMENTAL)
+    // Attention!
+    // Every function in this section may be changed, removed or renamed.
+
+    /**
+     * Refreshes value of a widget by running
+     * user-defined BLYNK_READ handler of a pin.
+     *
+     * @experimental
+     *
+     * @param pin Virtual Pin number
+     */
+    void refresh(int pin) {
+        if (WidgetReadHandler handler = GetReadHandler(pin)) {
+            BlynkReq req = { 0, BLYNK_SUCCESS, (uint8_t)pin };
+            handler(req);
+        }
+    }
+
+    /**
+     * Delays for N milliseconds, handling server communication in background.
+     *
+     * @experimental
+     * @warning Should be used very carefully, especially on platforms with small RAM.
+     *
+     * @param ms Milliseconds to wait
+     */
+    void delay(unsigned long ms) {
+        uint16_t start = (uint16_t)micros();
+        while (ms > 0) {
+            static_cast<Proto*>(this)->run();
+#if !defined(BLYNK_NO_YIELD)
+            yield();
+#endif
+            if (((uint16_t)micros() - start) >= 1000) {
+                ms--;
+                start += 1000;
+            }
+        }
+    }
+
+#endif
+
+protected:
+    void Init();
+    static millis_time_t getMillis();
+    void processCmd(const void* buff, size_t len);
+    void sendInfo();
+
+};
+
 
 #endif
