@@ -6,84 +6,61 @@
  *
  *   Downloads, docs, tutorials: http://www.blynk.cc
  *   Blynk community:            http://community.blynk.cc
- *   Social groups:              http://www.fb.com/blynkapp
+ *   Social networks:            http://www.fb.com/blynkapp
  *                               http://twitter.com/blynk_app
  *
  * Blynk library is licensed under MIT license
  * This example code is in public domain.
- * 
- * WARNING: It is recommended to use SparkCorePolledTimer library
- *          to make periodic actions (similar to SimpleTimer on Arduino).
+ *
+ **************************************************************
+ *
+ * This example shows how to use RedBear Duo BLE
+ * to connect your project to Blynk.
+ *
+ * NOTE: BLE support is in beta!
  *
  **************************************************************/
-//#define BLYNK_DEBUG // Uncomment this to see debug prints
+
+#if defined(ARDUINO)
+  SYSTEM_MODE(MANUAL);    // If Arduino - do not connect to Particle cloud
+#else
+  SYSTEM_MODE(AUTOMATIC); // Otherwise, connect to Particle cloud
+#endif
+
+//#define BLYNK_DEBUG
 #define BLYNK_PRINT Serial
-#include "blynk/blynk.h"
+
+//#define BLYNK_USE_DIRECT_CONNECT
+
+#include <BlynkSimpleRedBear_Duo_BLE.h>
 
 // You should get Auth Token in the Blynk App.
 // Go to the Project Settings (nut icon).
 char auth[] = "YourAuthToken";
 
-// Attach a Button widget (mode: Switch) to the Digital pin 7 - and control the built-in blue led.
-// Attach a Graph widget to Analog pin 1
-// Attach a Gauge widget to Analog pin 2
+void setup() {
+  Serial.begin(9600);
+  delay(5000);
 
-// No coding required for direct pin operations!
+  Blynk.begin(auth);
 
-void setup()
-{
-    Serial.begin(9600);
-    delay(5000); // Allow board to settle
-    Blynk.begin(auth);
+  Serial.println("Waiting for connections...");
 }
 
-// Attach a Button widget (mode: Push) to the Virtual pin 1 - and send sweet tweets!
-BLYNK_WRITE(V1) {
-    if (param.asInt() == 1) { // On button down...
-        // Tweeting!
-        // Note:
-        //   We allow 1 tweet per minute for now.
-        //   Twitter doesn't allow identical subsequent messages.
-        Blynk.tweet("My Particle project is tweeting using @blynk_app and it’s awesome!\n @Particle #IoT #blynk");
-        
-        // Pushing notification to the app!
-        // Note:
-        //   We allow 1 notification per minute for now.
-        Blynk.notify("You pressed the button and I know it ;)");
-    }
+void loop() {
+  Blynk.run();
 }
 
-// Attach a ZeRGBa widget (mode: Merge) to the Virtual pin 2 - and control the built-in RGB led!
-BLYNK_WRITE(V2) {
-    int r = param[0].asInt();
-    int g = param[1].asInt();
-    int b = param[2].asInt();
-    if (r > 0 || g > 0 || b > 0) {
-        RGB.control(true);
-        RGB.color(r, g, b);
-    } else {
-        RGB.control(false);
-    }
+// Next functions are optional.
+// Add ZeRGBa Widget on V0 to control onboard LED.
+BLYNK_CONNECTED() {
+  RGB.control(true);
 }
 
-void loop()
-{
-    Blynk.run();
-    
-    if (ModeBtnPressed()) {
-        Blynk.notify("Mode button was pressed");
-    }
-}
-
-// *** Utility functions
-
-bool ModeBtnPressed() {
-    if(millis() > 5000) {
-        if(BUTTON_GetDebouncedTime(BUTTON1) >= 50) {
-            BUTTON_ResetDebouncedState(BUTTON1);
-            return 1;
-        }
-    }
-    return 0;
+BLYNK_WRITE(V0) {
+  int r = param[0].asInt();
+  int g = param[1].asInt();
+  int b = param[2].asInt();
+  RGB.color(r, g, b);
 }
 
